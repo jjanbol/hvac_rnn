@@ -1,16 +1,17 @@
-#Click run then use right arrow to advance count, left arrow to decrease count
+#Click run in IDE, then use right arrow to advance count, left arrow to decrease count
 
+#Required modules for import
 import requests
 from pynput import keyboard
 import ntplib
 from datetime import datetime, timezone, timedelta
 
-# === CONFIGURATION ===
+# Configuration
 DATABASE_URL = "https://autonomous-hvac-default-rtdb.firebaseio.com"  
 DB_SECRET = "D7UBQ1TtLE70Qhjy6TCRsVkiS3sPz6rEi5kbnsI2"                   
 LOG_PATH = "/keyboard_count.json"                        
 
-# get ntp time then adjust to timezone
+# Sync to NTP time then adjust to timezone
 def get_ntp_time():
     try:
         client = ntplib.NTPClient()
@@ -23,7 +24,7 @@ def get_ntp_time():
         return (datetime.now(timezone.utc) - timedelta(hours=4)).strftime('%Y-%m-%d %H:%M:%S')
 
 
-# === LOG COUNT + TIMESTAMP TO FIREBASE ===
+# Define the function that logs the count to firebase with a timestamp
 def log_count_to_firebase():
     global count
     timestamp = get_ntp_time()
@@ -35,14 +36,14 @@ def log_count_to_firebase():
     response = requests.post(url, json=payload)
     print("POST response:", response.status_code, response.text)
 
-# === UPDATE COUNT LOCALLY + LOG ===
+# Function to update the count locally 
 def update_count(change):
     global count
     count += change
     log_count_to_firebase()
     print(f"Logged count: {count}")
 
-# === KEY PRESS HANDLER ===
+# Function to define count changes based on keyboard input
 def on_press(key):
     try:
         if key == keyboard.Key.right:
@@ -55,7 +56,7 @@ def on_press(key):
     except Exception as e:
         print(f"Exception caught: {e}")
 
-# === START ===
+# Run the program
 count = 0
 print(f"Starting count: {count}")
 

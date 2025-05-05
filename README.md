@@ -21,15 +21,15 @@ Below is a table outlining the plan for project completion, including milestones
 | **Project Proposal** | **2/25/25** | 100% Completed |
 | **Receive Initial Sensing Kit** | **3/25/25** | 100% Completed |
 | **Project Update Due** | **4/3/25** | 100% Completed |
-| **Order and Receive Any Additional Sensors Required** | **4/4/25** | 50% In Progress |
-| **First Scheduled Group Office Hour/Project Update** | **4/10/25** | 0% Not Started |
-| **Sensing Hardware Ready for Deployment** | **4/12/25** | 0% Not Started |
-| **Begin Sensor Deployment/Data Collection** | **4/15/25** | 0% Not Started |
-| **End Sensor Deployment/Data Collection** | **4/18/25** | 0% Not Started |
-| **Train Model and Complete Simulation** | **4/21/25** | 0% Not Started |
-| **Develop Initial Project Demonstration** | **4/21/25** | 0% Not Started |
-| **Second Scheduled Group Office Hour/Project Update** | **4/22/25** | 0% Not Started |
-| **Finalize Project Demonstration** | **4/23/25** | 0% Not Started |
-| **Project Demonstration Event** | **4/25/25** | 0% Not Started |
-| **Project Report Due** | **5/5/25** | 0% Not Started |
+| **Order and Receive Any Additional Sensors Required** | **4/4/25** | 100% Completed |
+| **First Scheduled Group Office Hour/Project Update** | **4/10/25** | 100% Completed |
+| **Sensing Hardware Ready for Deployment** | **4/12/25** | 100% Completed |
+| **Begin Sensor Deployment/Data Collection** | **4/15/25** | 100% Completed |
+| **End Sensor Deployment/Data Collection** | **4/18/25** | 100% Completed |
+| **Train Model and Complete Simulation** | **4/21/25** | 100% Completed |
+| **Develop Initial Project Demonstration** | **4/21/25** | 100% Completed |
+| **Second Scheduled Group Office Hour/Project Update** | **4/22/25** | 100% Completed |
+| **Finalize Project Demonstration** | **4/23/25** | 100% Completed |
+| **Project Demonstration Event** | **4/25/25** | 100% Completed |
+| **Project Report Due** | **5/5/25** | 100% Completed |
 

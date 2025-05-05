@@ -10,13 +10,20 @@ import numpy as np
 import asyncio
 import os
 
-# Fix for the event loop error
-if not asyncio.get_event_loop().is_running():
-    try:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-    except RuntimeError:
-        # If we can't set the event loop, we'll continue without it
-        pass
+# --- EVENT LOOP FIX ---
+# Disable Streamlit's source watcher for this script
+st.runtime.legacy_caching.clear_cache()
+st.runtime.legacy_caching.suppress_st_warning = True
+
+# Create a new event loop if none exists
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError as e:
+    if "There is no current event loop" in str(e):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    else:
+        raise
 
 # --- CONFIGURATION ---
 # Initialize Firebase only once
@@ -59,7 +66,6 @@ def load_model():
             def initialize_weights(self):
                 for m in self.modules():
                     if isinstance(m, torch.nn.Linear):
-                        # Using kaiming_normal as specified in the config
                         torch.nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
                         m.bias.data.fill_(0)
                         
@@ -68,16 +74,16 @@ def load_model():
                     x = layer(x)
                 return x
         
-        # Create model instance with the same parameters as in the provided code
+        # Create model instance
         model = MLP(
-            input_dim=3,  # 3 inputs: depth, RGB, and pico
+            input_dim=3,
             hidden_dim=8, 
             output_dim=1,
             layers=3,
-            dropout_rate=0.2  # From the config
+            dropout_rate=0.2
         )
         
-        # Check if model file exists first
+        # Check if model file exists
         if os.path.exists('best_model'):
             state_dict = torch.load('best_model', map_location=torch.device('cpu'))
             model.load_state_dict(state_dict)
@@ -106,10 +112,10 @@ config = {
     'max_lr': 0.006,
     'pct_start': 0.1,
     'optimizers': 'AdamW',
-    'scheduler': 'OneCycleLR',  # 'ReduceLROnPlateau'
+    'scheduler': 'OneCycleLR',
     'epochs': 25,
     'batch_size': 32,
-    'weight_initialization': 'kaiming_normal',  # e.g kaiming_normal, kaiming_uniform, uniform, xavier_normal or xavier_uniform
+    'weight_initialization': 'kaiming_normal',
     'dropout': 0.2
 }
 
@@ -134,7 +140,6 @@ def load_yolo_depth():
                 ts_dt = datetime.fromtimestamp(float(ts))
             except Exception:
                 pass
-        # Correct for the one-hour offset
         if ts_dt:
             ts_dt -= timedelta(hours=1)
         rows.append({
@@ -147,7 +152,6 @@ def load_yolo_depth():
     if 'Timestamp' in df.columns and not df.empty:
         df = df.sort_values('Timestamp', ascending=False)
     return df
-
 
 def load_people_counts():
     ref = db.reference('/people_counts')
@@ -179,7 +183,6 @@ def load_people_counts():
         df = df.sort_values('Timestamp', ascending=False)
     return df
 
-
 def load_pico_count():
     ref = db.reference('/people_inside')
     raw = ref.get() or {}
@@ -209,71 +212,57 @@ def load_pico_count():
 
 # --- MODEL PREDICTION FUNCTION ---
 def get_model_prediction(df_yolo, df_people, df_pico):
-    """Get prediction from the loaded model using data with matching timestamps"""
     try:
-        # Check if we have data from all sources
         if df_yolo.empty or df_people.empty or df_pico.empty:
             return None, "Missing data from one or more sources", None
         
-        # Make sure timestamps are datetime objects
         for df in [df_yolo, df_people, df_pico]:
             if 'Timestamp' in df.columns:
                 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
             else:
-                return None, "Missing timestamp information in one or more data sources", None
+                return None, "Missing timestamp information", None
         
-        # Get the most recent timestamp as a reference point
         latest_timestamps = [
             df_yolo['Timestamp'].max(),
             df_people['Timestamp'].max(),
             df_pico['Timestamp'].max()
         ]
-        reference_time = min(latest_timestamps)  # Use the earliest of the latest timestamps
+        reference_time = min(latest_timestamps)
         
-        # Find the closest timestamp in each dataframe to the reference time
         yolo_record = df_yolo.iloc[(df_yolo['Timestamp'] - reference_time).abs().argsort()[0]]
         people_record = df_people.iloc[(df_people['Timestamp'] - reference_time).abs().argsort()[0]]
         pico_record = df_pico.iloc[(df_pico['Timestamp'] - reference_time).abs().argsort()[0]]
         
-        # Get the values from the matched records
         depth_input = yolo_record.get('People Count', 0)
         rgb_input = people_record.get('Count', 0)
         pico_input = pico_record.get('Count', 0)
         
-        # Calculate time differences to check for synchronization
         time_diff_depth = abs((yolo_record['Timestamp'] - reference_time).total_seconds())
         time_diff_rgb = abs((people_record['Timestamp'] - reference_time).total_seconds())
         time_diff_pico = abs((pico_record['Timestamp'] - reference_time).total_seconds())
         
-        # Log the inputs and their timestamps for debugging
         st.sidebar.write("### Model Inputs")
         st.sidebar.write(f"- YOLO Depth: {depth_input} (time diff: {time_diff_depth:.2f}s)")
         st.sidebar.write(f"- YOLO RGB: {rgb_input} (time diff: {time_diff_rgb:.2f}s)")
         st.sidebar.write(f"- Pico: {pico_input} (time diff: {time_diff_pico:.2f}s)")
         
-        # Warning if timestamps are too far apart (more than 5 seconds)
         max_time_diff = max(time_diff_depth, time_diff_rgb, time_diff_pico)
         if max_time_diff > 5:
             st.sidebar.warning(f"⚠️ Timestamp mismatch: Data points are up to {max_time_diff:.1f} seconds apart")
         
-        # Load the model
         model = load_model()
         if model is None:
             return None, "Model could not be loaded", None
         
-        # Create input tensor - exactly matching the format in your original code
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
         
-        # Create input tensor with all three values - exactly as requested in your original code
         input_tensor = torch.tensor([float(depth_input), float(rgb_input), float(pico_input)], 
                                     dtype=torch.float32).unsqueeze(0).to(device)
         
-        # Get prediction - exactly as requested in your original code
         with torch.no_grad():
             logits = model(input_tensor) 
             rounded_logits = logits.cpu().numpy()
-            # Print the logits as requested in your original code
             print(rounded_logits)
         
         return rounded_logits, None, reference_time
@@ -292,9 +281,8 @@ with yolo_tab:
         st.write("No data under `/yolo-depth`.")
     else:
         st.dataframe(df_yolo, use_container_width=True, height=400)
-        # Combined People and Fake counts
+        
         st.subheader("People vs Fake Count Over Time")
-        # Check if required columns exist before melting
         if 'Timestamp' in df_yolo.columns and 'People Count' in df_yolo.columns and 'Fake Count' in df_yolo.columns:
             melt1 = df_yolo.reset_index(drop=True).melt(
                 id_vars=['Timestamp'],
@@ -303,11 +291,8 @@ with yolo_tab:
             )
             
             if not melt1.empty:
-                # Get min and max values for better y-axis scale
                 y_min = melt1['Value'].min()
-                y_max = max(melt1['Value'].max(), 1)  # Ensure at least 1 for empty datasets
-                
-                # Calculate a sensible step for ticks based on the range
+                y_max = max(melt1['Value'].max(), 1)
                 step = max(1, int((y_max - y_min) / 4))
                 
                 chart1 = alt.Chart(melt1).mark_point(size=60).encode(
@@ -316,7 +301,7 @@ with yolo_tab:
                         axis=alt.Axis(title='Time', format='%H:%M:%S', labelAngle=-45)),
                     y=alt.Y('Value:Q',
                         scale=alt.Scale(domain=[y_min, y_max], nice=False),
-                        axis=alt.Axis(title='Count', format='d', values=list(range(int(y_min), int(y_max) + 1, step)))),
+                        axis=alt.Axis(title='Count', format='d', values=list(range(int(y_min), int(y_max) + 1, step))),
                     color=alt.Color('Series:N', scale=alt.Scale(
                         domain=['People Count', 'Fake Count'],
                         range=['#00FF00', 'red']
@@ -328,18 +313,13 @@ with yolo_tab:
         else:
             st.write("Missing required columns for chart.")
 
-        # Separate Fake Count chart
         st.subheader("Fake Count Over Time")
         if not df_yolo.empty and 'Timestamp' in df_yolo.columns and 'Fake Count' in df_yolo.columns:
-            # Ensure timestamps are properly formatted
             valid_data = df_yolo.dropna(subset=['Timestamp', 'Fake Count'])
             
             if not valid_data.empty:
-                # Get min and max values for better y-axis scale
                 y_min = valid_data['Fake Count'].min()
-                y_max = max(valid_data['Fake Count'].max(), 1)  # Ensure at least 1 for empty datasets
-                
-                # Calculate a sensible step for ticks based on the range
+                y_max = max(valid_data['Fake Count'].max(), 1)
                 step = max(1, int((y_max - y_min) / 4))
                 
                 chart_fake = alt.Chart(valid_data).mark_point(size=60, color='red').encode(
@@ -366,11 +346,8 @@ with people_tab:
         st.subheader("Count Over Time")
         
         if not df_pc.empty and 'Count' in df_pc.columns and 'Timestamp' in df_pc.columns:
-            # Get min and max values for better y-axis scale
             y_min = df_pc['Count'].min()
-            y_max = max(df_pc['Count'].max(), 1)  # Ensure at least 1 for empty datasets
-            
-            # Calculate a sensible step for ticks based on the range
+            y_max = max(df_pc['Count'].max(), 1)
             step = max(1, int((y_max - y_min) / 4))
             
             chart_count = alt.Chart(df_pc).mark_point(size=60, color='orange').encode(
@@ -390,7 +367,7 @@ with people_tab:
                     scale=alt.Scale(nice=True),
                     axis=alt.Axis(title='Time', format='%H:%M:%S', labelAngle=-45)),
                 y=alt.Y('Average Confidence:Q',
-                    axis=alt.Axis(title='Confidence'))  # Keep as float for confidence values
+                    axis=alt.Axis(title='Confidence'))
             ).properties(width='container', height=300)
             st.altair_chart(chart_conf, use_container_width=True)
 
@@ -404,11 +381,8 @@ with pico_tab:
         st.subheader("Count Over Time")
         
         if not df_pico.empty and 'Count' in df_pico.columns and 'Timestamp' in df_pico.columns:
-            # Get min and max values for better y-axis scale
             y_min = df_pico['Count'].min()
-            y_max = max(df_pico['Count'].max(), 1)  # Ensure at least 1 for empty datasets
-            
-            # Calculate a sensible step for ticks based on the range
+            y_max = max(df_pico['Count'].max(), 1)
             step = max(1, int((y_max - y_min) / 4))
             
             chart_pico = alt.Chart(df_pico).mark_point(size=60, color="green").encode(
@@ -424,21 +398,17 @@ with pico_tab:
 with prediction_tab:
     st.header("Model Prediction")
     
-    # Reload the data to ensure we have the most recent values
     df_yolo = load_yolo_depth()
     df_pc = load_people_counts()
     df_pico = load_pico_count()
     
-    # Display the inputs that will be used for prediction
     st.subheader("Current Inputs for Prediction")
     
-    # Get model prediction with timestamp matching
     prediction, error, reference_time = get_model_prediction(df_yolo, df_pc, df_pico)
     
     if error:
         st.error(error)
         
-        # Show the input data even if there's an error
         st.write("Available data:")
         if not df_yolo.empty:
             st.write("YOLO Depth data available")
@@ -459,17 +429,13 @@ with prediction_tab:
             st.write("No Pico data")
     
     elif prediction is not None:
-        # Display the timestamp used for prediction
         st.info(f"Prediction based on data from: {reference_time.strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Create a dataframe showing the matched data points used
         if not df_yolo.empty and not df_pc.empty and not df_pico.empty:
-            # Find the data points used for prediction
             yolo_record = df_yolo.iloc[(df_yolo['Timestamp'] - reference_time).abs().argsort()[0]]
             people_record = df_pc.iloc[(df_pc['Timestamp'] - reference_time).abs().argsort()[0]]
             pico_record = df_pico.iloc[(df_pico['Timestamp'] - reference_time).abs().argsort()[0]]
             
-            # Create a dataframe with the matched data
             matched_data = pd.DataFrame({
                 'Sensor': ['YOLO Depth', 'YOLO RGB', 'Pico Hypersonic'],
                 'Value': [
@@ -492,49 +458,37 @@ with prediction_tab:
             st.write("Data points used for prediction:")
             st.dataframe(matched_data, use_container_width=True)
             
-            # Calculate time synchronization metrics
             max_time_diff = matched_data['Time Diff (s)'].max()
             if max_time_diff > 5:
                 st.warning(f"⚠️ Large timestamp difference detected: Data points are up to {max_time_diff:.1f} seconds apart")
         
         st.subheader("Model Prediction Results")
-        
-        # Display the raw logits as requested in the original code
         st.code(f"Raw logits: {prediction}")
-        
-        # Also show a more user-friendly display
         st.metric(label="Predicted Value", value=f"{prediction[0][0]:.4f}")
         
-        # Create a dataframe to store historical predictions
         if 'prediction_history' not in st.session_state:
             st.session_state.prediction_history = pd.DataFrame(columns=['Timestamp', 'Prediction', 'Reference Time'])
         
-        # Add current prediction to history with reference time
         new_row = pd.DataFrame({
             'Timestamp': [datetime.now()],
             'Prediction': [prediction[0][0]],
             'Reference Time': [reference_time]
         })
         
-        # Fix for the FutureWarning about concat with empty DataFrames
         if st.session_state.prediction_history.empty:
             st.session_state.prediction_history = new_row
         else:
             st.session_state.prediction_history = pd.concat([new_row, st.session_state.prediction_history], ignore_index=True)
         
-        # Keep only the last 50 predictions to avoid memory issues
         if len(st.session_state.prediction_history) > 50:
             st.session_state.prediction_history = st.session_state.prediction_history.head(50)
             
-        # Display prediction history
         st.subheader("Prediction History")
         st.dataframe(st.session_state.prediction_history, use_container_width=True)
         
-        # Plot predictions over time
         if len(st.session_state.prediction_history) > 1:
             st.subheader("Predictions Over Time")
             
-            # Create a line chart for predictions
             prediction_chart = alt.Chart(st.session_state.prediction_history).mark_line(color='blue').encode(
                 x=alt.X('Timestamp:T', 
                        scale=alt.Scale(nice=True),
@@ -543,19 +497,16 @@ with prediction_tab:
                        axis=alt.Axis(title='Prediction Value'))
             ).properties(width='container', height=300)
             
-            # Add points to the line chart
             prediction_points = alt.Chart(st.session_state.prediction_history).mark_circle(size=60, color='red').encode(
                 x='Timestamp:T',
                 y='Prediction:Q',
                 tooltip=['Prediction:Q', 'Reference Time:T']
             )
             
-            # Display the combined chart
             st.altair_chart(prediction_chart + prediction_points, use_container_width=True)
     else:
         st.warning("No prediction available. Ensure all data sources have values and the model is correctly loaded.")
         
-        # Show available data for debugging
         st.write("Available data:")
         if not df_yolo.empty:
             st.write("YOLO Depth data:")
@@ -575,7 +526,6 @@ with prediction_tab:
         else:
             st.write("No Pico data")
     
-    # Remove duplicate refresh button (there were two in the original code)
     if st.button("🔄 Refresh Prediction", key="refresh_prediction"):
         st.experimental_rerun()
 

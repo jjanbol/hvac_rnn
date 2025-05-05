@@ -12,6 +12,8 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 import joblib
 from sklearn.preprocessing import StandardScaler
+import warnings
+import asyncio
 # --- CONFIGURATION ---
 # Initialize Firebase only once
 try:
@@ -23,6 +25,15 @@ except ValueError:
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://autonomous-hvac-default-rtdb.firebaseio.com'
         })
+
+# Suppress scikit-learn version mismatch warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
+
+# Fix event loop issue
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 # --- MODEL LOADING ---
 # Create a function to load the MLP model
@@ -84,15 +95,23 @@ def load_mlp_model():
 @st.cache_resource
 def load_traditional_models():
     try:
-        # Load scaler
-        scaler = joblib.load('models/scaler.joblib')
+        # Load models with version compatibility check
+        def safe_load_model(path):
+            try:
+                return joblib.load(path)
+            except Exception as e:
+                st.error(f"Error loading model from {path}: {e}")
+                return None
         
-        # Load models
-        rf_model = joblib.load('models/random_forest.joblib')
-        gb_model = joblib.load('models/gradient_boosting.joblib')
-        xgb_model = joblib.load('models/xgboost.joblib')
-        ensemble_model = joblib.load('models/ensemble.joblib')
+        scaler = safe_load_model('models/scaler.joblib')
+        rf_model = safe_load_model('models/random_forest.joblib')
+        gb_model = safe_load_model('models/gradient_boosting.joblib')
+        xgb_model = safe_load_model('models/xgboost.joblib')
+        ensemble_model = safe_load_model('models/ensemble.joblib')
         
+        if any(model is None for model in [scaler, rf_model, gb_model, xgb_model, ensemble_model]):
+            return None
+            
         return {
             'scaler': scaler,
             'rf': rf_model,

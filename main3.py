@@ -223,14 +223,14 @@ def get_model_prediction(df_yolo, df_people, df_pico):
     try:
         # Check if we have data from all sources
         if df_yolo.empty or df_people.empty or df_pico.empty:
-            return None, "Missing data from one or more sources"
+            return None, "Missing data from one or more sources", None
         
         # Make sure timestamps are datetime objects
         for df in [df_yolo, df_people, df_pico]:
             if 'Timestamp' in df.columns:
                 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
             else:
-                return None, "Missing timestamp information in one or more data sources"
+                return None, "Missing timestamp information in one or more data sources", None
         
         # Get the most recent timestamp as a reference point
         latest_timestamps = [
@@ -269,12 +269,12 @@ def get_model_prediction(df_yolo, df_people, df_pico):
         # Load MLP model
         mlp_model = load_mlp_model()
         if mlp_model is None:
-            return None, "MLP model could not be loaded"
+            return None, "MLP model could not be loaded", None
         
         # Load traditional models
         traditional_models = load_traditional_models()
         if traditional_models is None:
-            return None, "Traditional models could not be loaded"
+            return None, "Traditional models could not be loaded", None
         
         # Prepare input for MLP
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

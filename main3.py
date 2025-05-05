@@ -145,96 +145,111 @@ config = {
 }
 
 # Auto-refresh every 1 second
-auto_refresh = st_autorefresh(interval=1000, key="datarefresh")
+auto_refresh = st_autorefresh(interval=500, key="datarefresh")
 
 # --- DATA LOADERS ---
+@st.cache_data(ttl=5)  # Cache for only 1 second to ensure fresh data
 def load_yolo_depth():
-    ref = db.reference('/yolo-depth')
-    raw = ref.get() or {}
-    rows = []
-    for key, entry in raw.items():
-        ts = entry.get("timestamp")
-        ts_dt = None
-        if isinstance(ts, str):
-            try:
-                ts_dt = datetime.fromisoformat(ts)
-            except ValueError:
-                pass
-        else:
-            try:
-                ts_dt = datetime.fromtimestamp(float(ts))
-            except Exception:
-                pass
-        # Correct for the one-hour offset
-        if ts_dt:
-            ts_dt -= timedelta(hours=1)
-        rows.append({
-            'Record ID': key,
-            'Timestamp': ts_dt,
-            'People Count': entry.get('People count') or entry.get('count'),
-            'Fake Count': entry.get('Fake count') or entry.get('fake_count')
-        })
-    df = pd.DataFrame(rows)
-    if 'Timestamp' in df.columns:
-        df = df.sort_values('Timestamp', ascending=False)
-    return df
+    try:
+        ref = db.reference('/yolo-depth')
+        raw = ref.get() or {}
+        rows = []
+        for key, entry in raw.items():
+            ts = entry.get("timestamp")
+            ts_dt = None
+            if isinstance(ts, str):
+                try:
+                    ts_dt = datetime.fromisoformat(ts)
+                except ValueError:
+                    pass
+            else:
+                try:
+                    ts_dt = datetime.fromtimestamp(float(ts))
+                except Exception:
+                    pass
+            # Correct for the one-hour offset
+            if ts_dt:
+                ts_dt -= timedelta(hours=1)
+            rows.append({
+                'Record ID': key,
+                'Timestamp': ts_dt,
+                'People Count': entry.get('People count') or entry.get('count'),
+                'Fake Count': entry.get('Fake count') or entry.get('fake_count')
+            })
+        df = pd.DataFrame(rows)
+        if 'Timestamp' in df.columns:
+            df = df.sort_values('Timestamp', ascending=False)
+        return df
+    except Exception as e:
+        st.error(f"Error loading YOLO depth data: {e}")
+        return pd.DataFrame()
 
+@st.cache_data(ttl=5)  # Cache for only 1 second to ensure fresh data
 def load_people_counts():
-    ref = db.reference('/people_counts')
-    raw = ref.get() or {}
-    rows = []
-    for key, entry in raw.items():
-        ts = entry.get("timestamp")
-        ts_dt = None
-        if isinstance(ts, str):
-            try:
-                ts_dt = datetime.fromisoformat(ts)
-            except ValueError:
-                pass
-        else:
-            try:
-                ts_dt = datetime.fromtimestamp(float(ts))
-            except Exception:
-                pass
-        dets = entry.get('detections', {})
-        rows.append({
-            'Record ID': key,
-            'Timestamp': ts_dt,
-            'Count': entry.get('count'),
-            'Average Confidence': entry.get('average_confidence'),
-            'Detections': len(dets)
-        })
-    df = pd.DataFrame(rows)
-    if 'Timestamp' in df.columns:
-        df = df.sort_values('Timestamp', ascending=False)
-    return df
+    try:
+        ref = db.reference('/people_counts')
+        raw = ref.get() or {}
+        rows = []
+        for key, entry in raw.items():
+            ts = entry.get("timestamp")
+            ts_dt = None
+            if isinstance(ts, str):
+                try:
+                    ts_dt = datetime.fromisoformat(ts)
+                except ValueError:
+                    pass
+            else:
+                try:
+                    ts_dt = datetime.fromtimestamp(float(ts))
+                except Exception:
+                    pass
+            dets = entry.get('detections', {})
+            rows.append({
+                'Record ID': key,
+                'Timestamp': ts_dt,
+                'Count': entry.get('count'),
+                'Average Confidence': entry.get('average_confidence'),
+                'Detections': len(dets)
+            })
+        df = pd.DataFrame(rows)
+        if 'Timestamp' in df.columns:
+            df = df.sort_values('Timestamp', ascending=False)
+        return df
+    except Exception as e:
+        st.error(f"Error loading people counts: {e}")
+        return pd.DataFrame()
 
+@st.cache_data(ttl=5)  # Cache for only 1 second to ensure fresh data
 def load_pico_count():
-    ref = db.reference('/people_inside')
-    raw = ref.get() or {}
-    rows = []
-    for key, entry in raw.items():
-        ts = entry.get("timestamp")
-        ts_dt = None
-        if isinstance(ts, str):
-            try:
-                ts_dt = datetime.fromisoformat(ts)
-            except ValueError:
-                pass
-        else:
-            try:
-                ts_dt = datetime.fromtimestamp(float(ts))
-            except Exception:
-                pass
-        rows.append({
-            'Record ID': key,
-            'Timestamp': ts_dt,
-            'Count': entry.get('count')
-        })
-    df = pd.DataFrame(rows)
-    if 'Timestamp' in df.columns:
-        df = df.sort_values('Timestamp', ascending=False)
-    return df
+    try:
+        ref = db.reference('/people_inside')
+        raw = ref.get() or {}
+        rows = []
+        for key, entry in raw.items():
+            ts = entry.get("timestamp")
+            ts_dt = None
+            if isinstance(ts, str):
+                try:
+                    ts_dt = datetime.fromisoformat(ts)
+                except ValueError:
+                    pass
+            else:
+                try:
+                    ts_dt = datetime.fromtimestamp(float(ts))
+                except Exception:
+                    pass
+            rows.append({
+                'Record ID': key,
+                'Timestamp': ts_dt,
+                'Count': entry.get('count')
+            })
+        df = pd.DataFrame(rows)
+        if 'Timestamp' in df.columns:
+            df = df.sort_values('Timestamp', ascending=False)
+        return df
+    except Exception as e:
+        st.error(f"Error loading pico count: {e}")
+        return pd.DataFrame()
 
 # --- MODEL PREDICTION FUNCTION ---
 def get_model_prediction(df_yolo, df_people, df_pico):
@@ -251,18 +266,17 @@ def get_model_prediction(df_yolo, df_people, df_pico):
             else:
                 return None, "Missing timestamp information in one or more data sources", None
         
-        # Get the most recent timestamp as a reference point
-        latest_timestamps = [
-            df_yolo['Timestamp'].max(),
-            df_people['Timestamp'].max(),
-            df_pico['Timestamp'].max()
-        ]
-        reference_time = min(latest_timestamps)  # Use the earliest of the latest timestamps
+        # Use the most recent record from each sensor
+        yolo_record = df_yolo.sort_values('Timestamp', ascending=False).iloc[0]
+        people_record = df_people.sort_values('Timestamp', ascending=False).iloc[0]
+        pico_record = df_pico.sort_values('Timestamp', ascending=False).iloc[0]
         
-        # Find the closest timestamp in each dataframe to the reference time
-        yolo_record = df_yolo.iloc[(df_yolo['Timestamp'] - reference_time).abs().argsort()[0]]
-        people_record = df_people.iloc[(df_people['Timestamp'] - reference_time).abs().argsort()[0]]
-        pico_record = df_pico.iloc[(df_pico['Timestamp'] - reference_time).abs().argsort()[0]]
+        # The reference time is now the most recent of all three
+        reference_time = max([
+            yolo_record['Timestamp'],
+            people_record['Timestamp'],
+            pico_record['Timestamp']
+        ])
         
         # Get the values from the matched records
         depth_input = yolo_record.get('People Count', 0)

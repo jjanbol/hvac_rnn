@@ -1,6 +1,21 @@
 # Introduction
 Heating, ventilation, and air conditioning (HVAC) systems in commercial buildings often operate on static schedules that do not reflect real-time occupancy, leading to substantial energy waste. This project addresses the critical need for dynamic HVAC control by proposing an innovative solution that predicts room occupancy using machine learning. By integrating camera-based occupancy detection with a recurrent neural network (RNN), our approach forecasts occupancy trends to intelligently adjust HVAC settings, ensuring comfortable conditions only during periods of actual use. This predictive method fills a notable gap in current reactive HVAC systems, which struggle to adapt promptly to occupancy fluctuations and incur unnecessary energy costs. Validation through a thermodynamic simulation and real-world data demonstrates the potential for significant energy savings without compromising occupant comfort, offering a promising advancement in sustainable building management.
 
+# Dashboard User interface 
+![Main UI](screenshots/main.png)
+# Prediction tab
+![Prediction Tab](screenshots/prediction.png)
+# Firebase realtime database - Ground Truth sample
+![Firebase Ground Truth](screenshots/firebase1.png)
+
+# Firebase realtime database - RGB sample
+![Firebase Ground Truth](screenshots/firebase2.png)
+
+# Firebase realtime database - Pico sample
+![Firebase Ground Truth](screenshots/firebase3.png)
+
+# Firebase realtime database - RealSense Depth sample
+![Firebase Ground Truth](screenshots/firebase4.png)
 
 # Section III: Plan for Completion of the Project  
 
